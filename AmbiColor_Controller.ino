@@ -5,84 +5,66 @@
 Settings _settings;
 Controller _controller;
 
-uint8_t* _buffer;
+char _buffer[INITIAL_SERIAL_RX_SIZE];
 
-void setup() {
-  Serial.begin(460800);  
-  ClearSerialBuffer();
-  _buffer = new uint8_t[_settings.GetTotalBufferSize()];
-  
+void setup() {  
   pinMode(LED_BUILTIN, OUTPUT);
+  digitalWrite(LED_BUILTIN, LOW);
   
-  delay(2000);    
+  delay(3000);    
   Serial.println("AMBICOLOR CONTROLLER");
   SendInfo();
 }
 
 void loop() {
   CheckSerialConnected();
-  if(_settings.GetTotalBufferSize() <= Serial.available())
-  {    
-    CaptureBuffer();
-    #ifdef DEBUG_INPUT
-      Serial.print("Command byte:");
-      Serial.println(char(_buffer[0]));
-    #endif
-        
-    switch(char(_buffer[0]))
+  
+  int startChar = 0;
+  
+  if(Serial.available()){
+    startChar = Serial.read();
+  }
+  
+  if(startChar == '*' && Serial.available()){
+    startChar = 0;
+    int commandChar = Serial.read();
+    startChar = Serial.read();
+    
+    if(startChar == '*' && Serial.available())
     {
-      case 'I':
-        SendInfo();
-        break;
-      case 'C':
-        Config();
-        break;
-      case 'F':
-        _controller.ShowBuffer(_buffer, _settings.GetTotalBufferSize());
-        break;
-      default:
-        #ifdef DEBUG_INPUT
-          Serial.println("Command not accepted");
-        #endif
-        break;
+      #ifdef DEBUG_INPUT
+        Serial.print("CB:");
+        Serial.print(char(commandChar));
+        Serial.print(" S:");
+        Serial.println(Serial.available(), DEC);
+      #endif
+    
+      switch(char(commandChar))
+      {
+        case 'I':
+          SendInfo();
+          break;
+        case 'C':
+          Config();
+          break;
+        case 'F':
+          _controller.ShowBuffer(_settings.GetTotalLeds(), _settings.GetLedStripCount());
+          break;
+        case 'D':
+              _controller.PrintBuffer(_settings.GetTotalLeds());
+          break;
+        default:
+          break;
+      }
     }
-  }  
+  }    
 }
 
 void CheckSerialConnected(){
-    digitalWrite(LED_BUILTIN, Serial.dtr());
     if(!Serial.dtr()){
+      digitalWrite(LED_BUILTIN, LOW);
       _settings.SetConfigured(false);
-      ClearSerialBuffer();      
     }
-}
-
-void ClearSerialBuffer(){
-  //Clear buffer  
-  while(Serial.available() != 0)
-    Serial.read();
-}
-
-void CaptureBuffer(){
-  bool state = false;
-  
-  #ifdef DEBUG_INPUT
-    Serial.print("CaptureBuffer:");
-    Serial.println(Serial.available());
-  #endif
-  
-  for (int pos = 0; pos < _settings.GetTotalBufferSize(); pos++) {
-    _buffer[pos] = Serial.read();
-    digitalWrite(LED_BUILTIN, state = !state);
-    
-    #ifdef DEBUG_INPUT
-      Serial.print(_buffer[pos]);
-    #endif
-  }
-  
-  #ifdef DEBUG_INPUT
-      Serial.println();
-  #endif
 }
 
 void SendInfo(){
@@ -92,16 +74,43 @@ void SendInfo(){
 
 void Config()
 {
-  int horizontal = _buffer[1] + _buffer[2] + _buffer[3] + _buffer[4];
-  int vertical = _buffer[5] + _buffer[6] + _buffer[7] + _buffer[8];
-
-  char order[4] = {_buffer[9], _buffer[10], _buffer[11], _buffer[12]};
-  int numOfStrips = _buffer[13];
+  digitalWrite(LED_BUILTIN, HIGH);
+  Serial.readBytes(_buffer, INITIAL_SERIAL_RX_SIZE);
   
+  int horizontal = _buffer[0] + _buffer[1] + _buffer[2] + _buffer[3];
+  int vertical = _buffer[4] + _buffer[5] + _buffer[6] + _buffer[7];
+
+  char ledConfig = _buffer[8];
+  int numOfStrips = _buffer[12];
+  
+  _settings.SetLedStripCount(numOfStrips);
+  _settings.SetLedConfiguration(ledConfig);
   _settings.SetHorizontalCount(horizontal);
   _settings.SetVerticalCount(vertical);
   
-  if(_controller.InitLeds(vertical, horizontal, numOfStrips, order))
+  if(_controller.InitLeds(_settings.GetLedsPerStrip(), numOfStrips, ledConfig))
     _settings.SetConfigured(true);
-  _buffer = new uint8_t[_settings.GetTotalBufferSize()]; 
+  
+  #ifdef DEBUG_SETTINGS
+        Serial.print("[SETTINGS] ");
+        Serial.print("Vertical:");
+        Serial.print(vertical);
+        Serial.print(" Horizontal:");
+        Serial.print(horizontal);
+        Serial.print(" NumerOfStrips:");
+        Serial.print(numOfStrips);
+        Serial.print(" Buffersize:");
+        Serial.print(_settings.GetTotalBufferSize());
+        Serial.print(" LedOrder:");
+        switch(ledConfig){
+          case 0: Serial.print("RGB"); break;
+          case 1: Serial.print("RBG"); break;
+          case 2: Serial.print("GRB"); break;
+          case 3: Serial.print("GBR"); break;
+          case 4: Serial.print("BRG"); break;
+          case 5: Serial.print("BGR"); break;
+        }
+        Serial.print(" Configured:");
+        Serial.println(_settings.GetConfigured());
+  #endif
 }

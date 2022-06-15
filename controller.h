@@ -10,22 +10,16 @@ class Controller
   public:
     Controller();
 
-    bool InitLeds(int vertical, int horizontal, int numOfStrips, char* order);
-    bool ShowBuffer(uint8_t* buffer, int size);
+    bool InitLeds(uint32_t ledsPerStrip, uint32_t numOfStrips, uint8_t configBits);
+    void ShowBuffer(uint32_t leds, uint32_t numOfStrips);
+    void PrintBuffer(uint32_t leds);
     
   private:
-    int _vertical;
-    int _horizontal;
-    int _numberOfStrips;
-    char* _order;
-    
-    int _ledsPerStrip;
-    int _colorsPerBuffer;
-    int _bufferLength[MAX_OF_STRIPS];
-    
-    OctoWS2811* _leds;        
-    
-    int GetCount(int length, int offset);
+    OctoWS2811* _leds;
+    uint32_t _bufferSize;
+
+    byte _pinList[4] = {DATA_PIN_1, DATA_PIN_2, DATA_PIN_3, DATA_PIN_4};
+    void PrintAsRGB(int pos, int color);
 };
 
 #endif
